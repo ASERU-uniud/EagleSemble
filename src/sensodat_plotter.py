@@ -1,77 +1,55 @@
 import matplotlib.pyplot as plt
-from math import sqrt
+import shapely
 
-#TODO Use Numpy
-#TODO better approximation of tangents (try scipy)
-
-def sum_vectors(v1, v2):
-    (x1, y1), (x2, y2) = v1, v2
-    return x1 + x2, y1 + y2
-
-def get_orthogonal(vector):
-    x, y = vector
-    return y, -x
-
-def normalize(vector, factor=1):
-    x, y = vector
-    norm = sqrt(x * x + y * y)
-    return factor * x / norm, factor * y / norm
-
-
-def get_tangents(line):
-    previous_point = next(line)
-    current_point = next(line)
-    yield (current_point[0] - previous_point[0]), (current_point[1] - previous_point[1])
-    for next_point in line:
-        yield (next_point[0] - previous_point[0]), (next_point[1] - previous_point[1])
-        previous_point = current_point
-        current_point = next_point
-    yield (current_point[0] - previous_point[0]), (current_point[1] - previous_point[1])
-
-
-def get_boundary_lines(line, distances):
-    line = list(line)
-    orthogonals = [get_orthogonal(t) for t in get_tangents(iter(line))]
-    for distance in distances:
-        yield [sum_vectors(p, normalize(b, distance)) for p, b in zip(line, orthogonals)]
-
-def plot_trajectory(trajectory, traj_color='#FFFF00'):
+def plot_trajectory(trajectory, traj_color='#FFFF00', plot_car=False):
     trajectory_x, trajectory_y = list(zip(*trajectory))
     plt.plot(trajectory_x, trajectory_y, traj_color)
 
+    if plot_car:
+        xn, yn = trajectory_x[-1], trajectory_y[-1]
+        car = shapely.box(xn-1, yn-1, xn+1, yn+1)
+        plt.plot(*car.exterior.xy, traj_color)
 
-def plot_road(road, lane_width=3.0, line_width=0.2, road_color='#000000',
+#TODO re-design for performance DONE???
+def offset(line: shapely.LineString | list[tuple[float, ...]],
+           distance:float=0, width:float=0, chunk_size=30):
+
+    coords = list(line.coords) if isinstance(line, shapely.LineString) else line
+
+    if width > 0:
+        r = offset(coords, distance=distance + width / 2, width=0, chunk_size=chunk_size)
+        l = offset(coords, distance=distance - width / 2, width=0, chunk_size=chunk_size)
+        coords = r + l[::-1] + r[0:1]
+        if isinstance(line, shapely.LineString):
+            coords = shapely.Polygon(coords)
+        return coords
+
+    if distance != 0:
+        chunks = [coords[i:i + chunk_size] for i in range(0, len(coords), chunk_size)]
+        offsets = [shapely.LineString(coordinates=chunk).offset_curve(distance=distance) for chunk in chunks]
+        coords = sum([list(o.coords) for o in offsets], [])
+
+    if isinstance(line, shapely.LineString):
+        coords = shapely.LineString(coords)
+
+    return coords
+
+
+def plot_road(road, lane_width=5.0, line_width=0.2, road_color='#000000',
                     line_color='#FFFFFF', ):
-    distances = [lane_width + line_width * 2,
-                 lane_width + line_width / 2,
-                 lane_width - line_width / 2,
-                 line_width / 2,
-                 -line_width / 2,
-                 -lane_width + line_width / 2,
-                 -lane_width - line_width / 2,
-                 -lane_width - line_width * 2]
+    reference_line = shapely.LineString(coordinates=road)
+    right_line = offset(reference_line, distance=lane_width, width=line_width)
+    left_line = offset(reference_line, distance=-lane_width, width=line_width)
+    center_line = offset(reference_line, width=line_width)
+    road_polygon = offset(reference_line, width=2*lane_width+4*line_width)
 
-    (road_left,
-     line_left_l,
-     line_left_r,
-     line_central_l,
-     line_central_r,
-     line_right_l,
-     line_right_r,
-     road_right) = list(get_boundary_lines(road, distances))
-
-    road_x, road_y = list(zip(*(road_left+road_right[::-1])))
-    line_left_x, line_left_y = list(zip(*(line_left_l+line_left_r[::-1])))
-    line_central_x, line_central_y = list(zip(*(line_central_l+line_central_r[::-1])))
-    line_right_x, line_right_y = list(zip(*(line_right_l+line_right_r[::-1])))
-
-    plt.fill(road_x, road_y, road_color)
-    plt.fill(line_left_x, line_left_y, line_color)
-    plt.fill(line_central_x, line_central_y, line_color)
-    plt.fill(line_right_x, line_right_y, line_color)
+    plt.fill(*road_polygon.exterior.xy, road_color)
+    plt.fill(*left_line.exterior.xy, line_color)
+    plt.fill(*center_line.exterior.xy, line_color)
+    plt.fill(*right_line.exterior.xy, line_color)
 
 
-def plot_simulation(road, trajectory, outcome, lane_width=3.0, line_width=0.2, road_color='#000000',
+def plot_simulation(road, trajectory, outcome, lane_width=5.0, line_width=0.2, road_color='#000000',
                     line_color='#FFFFFF', ):
     clear()
     plot_road(road, lane_width, line_width, road_color, line_color)
