@@ -87,7 +87,7 @@ if __name__ == '__main__':
     durations = torch.tensor(durations, dtype=torch.float32)
     durations = durations.squeeze()
     # norm_durations = torch.nn.functional.sigmoid((durations.argsort(dim=0).argsort(dim=0)/(durations.shape[0]-1)))
-    roads, labels = eagle_feeder( road_fury_parse,roads, outcomes) #,  norm_durations)
+    roads, labels = eagle_feeder( mini_transf_eagle_parse,roads, outcomes) #,  norm_durations)
 
     roads = roads.transpose(1, 2)
     labels = labels.squeeze()
@@ -100,7 +100,7 @@ if __name__ == '__main__':
     # roads = (roads - roads_mean) / roads_std
     # roads = roads.reshape(roads.shape[0], -1)
 
-    for index_train, index_test in KFold(n_splits=10).split(roads):
+    for index_train, index_test in KFold(n_splits=80).split(roads):
 
         (roads_train, roads_test,
          labels_train, outcomes_test,
@@ -109,9 +109,9 @@ if __name__ == '__main__':
                                          durations[index_test])
 
 
-        model1=road_fury(roads_train, labels_train, parse_fn=None, nest=False, plot=False)
-        model2=road_fury(roads_train, labels_train, parse_fn=None, nest=False, plot=False)
-        model3=road_fury(roads_train, labels_train, parse_fn=None, nest=False, plot=False)
+        model1=mini_transf_eagle(roads_train, labels_train, parse_fn=None, nest=False, plot=False)
+        model2=mini_transf_eagle(roads_train, labels_train, parse_fn=None, nest=False, plot=False)
+        model3=mini_transf_eagle(roads_train, labels_train, parse_fn=None, nest=False, plot=False)
         model1, model2, model3 = (torch.nn.Sequential(model1, torch.nn.Sigmoid()),
                                   torch.nn.Sequential(model2, torch.nn.Sigmoid()),
                                   torch.nn.Sequential(model3, torch.nn.Sigmoid()))
@@ -139,5 +139,5 @@ if __name__ == '__main__':
 
         for k, v in stats.items():
             print(k+': ', v)
-        with open('stats/roadfury_stats.csv', 'a') as f:
+        with open('stats/eaglesemble_stats.csv', 'a') as f:
             f.write(','.join([str(s) for s in stats.values()]) + '\n')
